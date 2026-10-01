@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>智慧学习 · 站内设计说明（版本化）</title>
+<style>
+:root{--pri:#667eea;--sec:#764ba2;--ink:#2d3748;--muted:#718096;--line:#e2e8f0;--bg:#f7fafc;--ok:#2f855a;--warn:#c05621;--bad:#c53030;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;color:var(--ink);background:var(--bg);line-height:1.6}
+header.top{background:linear-gradient(135deg,var(--pri),var(--sec));color:#fff;padding:1.4rem 0}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.top h1{font-size:1.35rem}
+.top select{border:0;border-radius:8px;padding:.5rem .8rem;font-size:.95rem}
+.badge{display:inline-block;font-size:.78rem;padding:.15rem .55rem;border-radius:99px;background:rgba(255,255,255,.22);margin-left:.5rem}
+.badge.old{background:rgba(0,0,0,.25)}
+.note{font-size:.85rem;opacity:.9}
+section.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:1.3rem 1.4rem;margin:1.2rem 0;box-shadow:0 4px 18px rgba(0,0,0,.05)}
+h2{font-size:1.12rem;margin-bottom:.7rem;display:flex;align-items:center;gap:.5rem}
+h2::before{content:'';width:6px;height:1.1em;border-radius:3px;background:linear-gradient(var(--pri),var(--sec))}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.8rem}
+.layer{border:1px solid var(--line);border-radius:10px;padding:.7rem .9rem;background:var(--bg)}
+.layer b{color:var(--pri)}
+.pages{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.8rem}
+.pages a{font-size:.82rem;text-decoration:none;color:var(--sec);border:1px solid var(--line);padding:.2rem .65rem;border-radius:99px;background:#fff}
+.bp{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1rem}
+.bp figure{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+.bp figcaption{padding:.5rem .8rem;font-size:.85rem;color:var(--muted)}
+.bp img{width:100%;display:block;border-bottom:1px solid var(--line)}
+.decisions{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.8rem}
+.dec{border:1px solid var(--line);border-radius:10px;padding:.8rem;background:#fff}
+.dec .tag{font-size:.72rem;font-weight:700;padding:.1rem .5rem;border-radius:6px;margin-right:.4rem}
+.tag.source{background:#ebf8ff;color:#2b6cb0}.tag.color{background:#faf5ff;color:#6b46c1}
+.tag.a11y{background:#f0fff4;color:#276749}.tag.acceptance{background:#fffaf0;color:#c05621}.tag.general{background:#edf2f7;color:#4a5568}
+.dec h3{font-size:.95rem;margin:.3rem 0}
+.dec p{font-size:.84rem;color:#4a5568}
+.dec a.page{font-size:.78rem;color:var(--sec);word-break:break-all}
+.comps{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem}
+.comp{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+.comp .head{padding:.7rem .9rem;display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap}
+.comp .head b{font-size:.98rem}
+.token{font-family:ui-monospace,Menlo,monospace;font-size:.75rem;background:#edf2f7;border-radius:6px;padding:.1rem .45rem}
+.shots{display:flex;flex-direction:column;gap:.6rem;padding:.7rem .9rem;background:var(--bg)}
+.shots a{display:block}
+.shots img{width:100%;border:1px solid var(--line);border-radius:8px;background:#fff;display:block}
+.meta-line{font-size:.78rem;color:var(--muted);padding:0 .9rem .7rem}
+.body-md{white-space:pre-wrap;font-size:.92rem}
+#status{font-size:.85rem;color:var(--muted)}
+.liveflag{font-size:.75rem;color:var(--ok);font-weight:700}
+.oldflag{font-size:.75rem;color:var(--warn);font-weight:700}
+footer{padding:2rem 0;text-align:center;color:var(--muted);font-size:.82rem}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div>
+      <h1>智慧学习平台 · 站内设计说明<span id="verBadge" class="badge"></span></h1>
+      <div class="note" id="servedBy"></div>
+    </div>
+    <div>
+      <label class="note" for="verSelect">查看历史版本：</label>
+      <select id="verSelect"><option>加载中…</option></select>
+    </div>
+  </div>
+</header>
+<main class="wrap">
+  <div id="status">正在加载内容 API…</div>
+  <article id="content" hidden>
+    <section class="card">
+      <h2>主题定位</h2>
+      <p id="theme"></p>
+    </section>
+    <section class="card">
+      <h2>信息结构</h2>
+      <div class="kv" id="layers"></div>
+      <div class="pages" id="pages"></div>
+    </section>
+    <section class="card">
+      <h2>响应式样例（关键断点）</h2>
+      <p class="note" id="bpNote"></p>
+      <div class="bp" id="bpGrid"></div>
+    </section>
+    <section class="card">
+      <h2>设计决策与组件引用</h2>
+      <div class="decisions" id="decisions"></div>
+    </section>
+    <section class="card">
+      <h2>组件现状（截图按组件名+设计令牌+断点指纹保鲜）</h2>
+      <div class="comps" id="comps"></div>
+    </section>
+    <section class="card">
+      <h2>说明正文</h2>
+      <div class="body-md" id="body"></div>
+    </section>
+  </article>
+</main>
+<footer>
+  仅展示已发布版本；后台草稿不会出现在任何公开接口中 · 内容由设计说明内容 API 独立版本化发布
+  <br><a href="/app/admin.html" style="color:var(--muted)">编辑后台（需令牌）</a>
+</footer>
+<script>
+const $ = s => document.querySelector(s);
+const SLUG = 'design-spec';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function j(u){const r=await fetch(u);if(!r.ok)throw new Error(u+' -> '+r.status);return r.json();}
+const KIND_LABEL={source:'原创素材',color:'色彩',a11y:'可访问交互',acceptance:'验收',general:'决策',positioning:'定位'};
+
+async function loadVersions(){
+  const meta=await j(`/api/public/docs/${SLUG}/versions`);
+  const sel=$('#verSelect');sel.innerHTML='';
+  meta.versions.forEach(v=>{
+    const o=document.createElement('option');
+    o.value=v.version;o.textContent=`v${v.version} · ${v.status==='published'?'当前发布':'历史存档'} · ${(v.published_at||'').slice(0,16)}`;
+    if(v.version===meta.liveVersion)o.selected=true;
+    sel.appendChild(o);
+  });
+  sel.onchange=()=>loadVersion(sel.value);
+  return sel.value;
+}
+async function loadVersion(ver){
+  $('#status').hidden=false;$('#status').textContent='加载 v'+ver+' …';
+  const d=await j(`/api/public/docs/${SLUG}/versions/${ver}`).catch(e=>({error:e.message}));
+  if(d.error){$('#status').textContent='加载失败：'+d.error;return;}
+  $('#status').hidden=true;$('#content').hidden=false;
+  const isLive=d.isLive;
+  $('#verBadge').textContent='v'+d.version;$('#verBadge').className='badge'+(isLive?'':' old');
+  $('#servedBy').innerHTML=(isLive?'<span class="liveflag">● 当前稳定版</span>':`<span class="oldflag">● 历史版本（只读，展示当时决策）</span>`)+` · 兼容构建 ${esc(d.servedByBuild||'—')}`;
+  $('#theme').textContent=d.themePositioning;
+  let info={};try{info=typeof d.infoStructure==='string'?JSON.parse(d.infoStructure):d.infoStructure;}catch(e){}
+  $('#layers').innerHTML=(info.layers||[]).map((l,i)=>`<div class="layer"><b>L${i+1}</b> ${esc(l)}</div>`).join('');
+  $('#pages').innerHTML=(info.pages||[]).map(p=>`<a href="/site/${esc(d.servedByBuild)}/#" data-p="${esc(p)}">${esc(p)} ↗</a>`).join('');
+  document.querySelectorAll('#pages a').forEach(a=>a.href='/site/'+d.servedByBuild+a.dataset.p);
+  $('#bpNote').textContent=(d.responsiveSample&&d.responsiveSample.note)||'';
+  // 响应式样例：展示 navbar 组件在该版各断点的截图（当时快照）
+  const nav=(d.components||[]).find(c=>c.component_id==='navbar')||d.components[0];
+  $('#bpGrid').innerHTML=nav?nav.screenshots.map(s=>`
+    <figure><img src="/${s.file_path}" alt="${esc(nav.name)} @${s.width}px（历史快照，版本当时渲染）">
+    <figcaption>${s.width}px 断点 · 指纹 ${s.fingerprint.slice(0,8)}</figcaption></figure>`).join('')
+    :'<p class="note">该版本无组件样例</p>';
+  $('#decisions').innerHTML=(d.decisions||[]).map(x=>`
+    <div class="dec"><span class="tag ${x.kind}">${KIND_LABEL[x.kind]||x.kind}</span><h3>${esc(x.title)}</h3>
+    <p>${esc(x.detail)}</p>
+    ${x.page_path?`<a class="page" href="/site/${esc(d.servedByBuild)}${esc(x.page_path)}" target="_blank">↳ 关联实际页面 ${esc(x.page_path)}${x.target_selector?' · '+esc(x.target_selector):''}</a>`:''}
+    </div>`).join('');
+  $('#comps').innerHTML=(d.components||[]).map(c=>`
+    <div class="comp">
+      <div class="head"><b>${esc(c.name)}</b><span class="token">--${esc(c.token_name)}: ${esc(c.token_value)}</span></div>
+      <div class="shots">${c.screenshots.map(s=>`<a href="/${s.file_path}" target="_blank"><img src="/${s.file_path}" alt="${esc(c.name)} ${s.width}px" loading="lazy"></a>`).join('')}</div>
+      <div class="meta-line">${esc(c.token_semantic)} · 截图 ${c.screenshots.length} 张 · 渲染器 ${esc(c.screenshots[0]?c.screenshots[0].renderer:'')} · ${c.acceptance?'验收：'+esc(c.acceptance.title):'无验收'}</div>
+    </div>`).join('');
+  $('#body').textContent=d.body;
+}
+loadVersions().then(v=>loadVersion(v)).catch(e=>{$('#status').textContent='初始化失败：'+e.message;});
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "smartlearn-design-system",
+  "version": "1.0.0",
+  "description": "全栈版本化站内设计说明：内容 API + SQL 版本库 + 兼容检查与发布屏障",
+  "main": "server/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/index.js",
+    "seed": "node server/seed.js --force",
+    "deliver": "node tools/deliver.js"
+  },
+  "dependencies": {
+    "express": "^4.22.3",
+    "sql.js": "^1.12.0"
+  }
+}

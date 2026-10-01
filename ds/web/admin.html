@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>设计说明 · 编辑后台</title>
+<style>
+:root{--pri:#667eea;--sec:#764ba2;--ink:#2d3748;--muted:#718096;--line:#e2e8f0;--bg:#f7fafc;--ok:#2f855a;--warn:#c05621;--bad:#c53030;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--ink);display:flex;min-height:100vh}
+aside{width:230px;background:#fff;border-right:1px solid var(--line);padding:1rem;position:sticky;top:0;height:100vh;overflow:auto}
+aside h1{font-size:1rem;margin-bottom:1rem;color:var(--pri)}
+aside button{display:block;width:100%;text-align:left;margin:.2rem 0;padding:.5rem .7rem;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;font-size:.9rem}
+aside button.active{background:linear-gradient(135deg,var(--pri),var(--sec));color:#fff;border-color:transparent}
+main{flex:1;padding:1.4rem;max-width:1100px}
+h2{margin-bottom:1rem}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:1.1rem 1.2rem;margin-bottom:1rem}
+label{display:block;font-size:.82rem;color:var(--muted);margin:.6rem 0 .2rem}
+input,textarea,select{width:100%;padding:.5rem .65rem;border:1px solid var(--line);border-radius:8px;font-size:.9rem;font-family:inherit}
+textarea{min-height:90px}
+button.act{background:linear-gradient(135deg,var(--pri),var(--sec));color:#fff;border:0;padding:.55rem 1.1rem;border-radius:8px;cursor:pointer;font-weight:600;margin:.6rem .4rem 0 0}
+button.ghost{background:#fff;border:1px solid var(--line);color:var(--ink);padding:.55rem 1rem;border-radius:8px;cursor:pointer;margin:.6rem .4rem 0 0}
+button.danger{background:#fff;border:1px solid var(--bad);color:var(--bad);padding:.45rem .9rem;border-radius:8px;cursor:pointer;font-size:.82rem}
+.row{display:flex;gap:.8rem;flex-wrap:wrap}.row>div{flex:1;min-width:200px}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th,td{text-align:left;padding:.5rem .6rem;border-bottom:1px solid var(--line);vertical-align:top}
+.gate{display:flex;gap:.6rem;align-items:flex-start;padding:.45rem .6rem;border-radius:8px;margin:.3rem 0;font-size:.86rem}
+.gate.ok{background:#f0fff4}.gate.bad{background:#fff5f5}
+.dot{width:10px;height:10px;border-radius:50%;margin-top:.45rem;flex:none}.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}
+.pill{font-size:.72rem;padding:.08rem .5rem;border-radius:99px;background:#edf2f7}
+.pill.active{background:#c6f6d5;color:#22543d}.pill.retracted{background:#fed7d7;color:#742a2a}
+.pill.draft{background:#feebc8;color:#7b341e}.pill.published{background:#bee3f8;color:#2a4365}.pill.archived{background:#e2e8f0;color:#4a5568}.pill.pending{background:#fefcbf;color:#744210}
+#toast{position:fixed;right:16px;bottom:16px;max-width:460px;z-index:99}
+.toast{padding:.7rem 1rem;border-radius:10px;color:#fff;margin-top:.5rem;font-size:.86rem;box-shadow:0 6px 24px rgba(0,0,0,.18)}
+.toast.ok{background:var(--ok)}.toast.err{background:var(--bad)}.toast.info{background:#2b6cb0}
+.shotgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.6rem;margin-top:.5rem}
+.shotgrid img{width:100%;border:1px solid var(--line);border-radius:8px;background:#fff}
+.muted{color:var(--muted);font-size:.82rem}
+code{background:#edf2f7;padding:.05rem .3rem;border-radius:5px;font-size:.82em}
+</style>
+</head>
+<body>
+<aside>
+  <h1>设计说明后台</h1>
+  <div style="margin-bottom:.8rem">
+    <input id="token" placeholder="编辑令牌 x-editor-token" value="dev-editor-token">
+    <input id="editorName" placeholder="编辑者名字" value="editor-a" style="margin-top:.4rem">
+  </div>
+  <button data-tab="dashboard" class="active">总览 / 版本</button>
+  <button data-tab="edit">草稿编辑</button>
+  <button data-tab="decisions">设计决策 / 引用</button>
+  <button data-tab="components">组件与设计令牌</button>
+  <button data-tab="builds">站点构建与撤回</button>
+  <button data-tab="release">兼容检查与发布屏障</button>
+  <button data-tab="audit">审计与发布尝试</button>
+  <a href="/app/" target="_blank" style="font-size:.82rem;color:var(--muted)">↗ 打开公开页</a>
+</aside>
+<main>
+  <div id="view"></div>
+</main>
+<div id="toast"></div>
+<script>
+const $=s=>document.querySelector(s);
+const h=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const state={tab:'dashboard',etag:null,dvId:null,draft:null};
+function toast(msg,kind='info'){const t=document.createElement('div');t.className='toast '+kind;t.textContent=msg;$('#toast').appendChild(t);setTimeout(()=>t.remove(),5000);}
+async function api(method,url,body,etagMatch){
+  const r=await fetch(url,{method,headers:{'Content-Type':'application/json','x-editor-token':$('#token').value,'x-editor-name':$('#editorName').value,...(etagMatch?{'If-Match':etagMatch}:{})},body:body?JSON.stringify(body):undefined});
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok)throw Object.assign(new Error(data.error||('HTTP '+r.status)),{data});
+  return data;
+}
+let renderGen=0;
+async function load(tab){
+  const gen=++renderGen; // 防止慢请求的旧渲染覆盖新页面（竞态屏障）
+  state.tab=tab;document.querySelectorAll('aside button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  try{ if(render[tab]) await render[tab](); else $('#view').innerHTML=''; }
+  catch(e){ if(gen===renderGen) toast(e.message,'err'); }
+}
+document.querySelectorAll('aside button').forEach(b=>b.onclick=()=>load(b.dataset.tab));
+
+const render={};
+
+render.dashboard=async()=>{
+  const docs=await api('GET','/api/admin/docs');
+  const comps=await api('GET','/api/admin/components');
+  $('#view').innerHTML=`
+  <h2>文档总览</h2>
+  <div class="card"><table>
+    <tr><th>slug</th><th>标题</th><th>当前稳定版</th><th>打开的草稿</th></tr>
+    ${docs.map(d=>`<tr><td>${h(d.slug)}</td><td>${h(d.title)}</td><td>v${d.live_version??'—'}</td><td>${d.draft_version?`<button class="ghost" onclick="openDraft()">v${d.draft_version}（继续编辑）</button>`:'<button class="act" onclick="newDraft()">从稳定版新建草稿</button>'}</td></tr>`).join('')}
+  </table></div>
+  <h2>组件</h2><div class="card"><table>
+    <tr><th>组件</th><th>当前版本</th><th>令牌</th><th>状态</th></tr>
+    ${comps.map(c=>`<tr><td>${h(c.name)}<div class="muted">${h(c.id)}</div></td><td>v${c.version??'—'}</td><td><code>--${h(c.token_name)}:${h(c.token_value)}</code></td><td><span class="pill ${c.status}">${h(c.status)}</span></td></tr>`).join('')}
+  </table></div>
+  <div class="card"><h3 style="margin-bottom:.5rem">历史版本（读者也可切换；可回滚）</h3><div id="hist"></div></div>`;
+  const vs=await (await fetch('/api/public/docs/design-spec/versions')).json();
+  $('#hist').innerHTML=`<table><tr><th>版本</th><th>状态</th><th>构建</th><th>发布时间</th><th>操作</th></tr>
+    ${vs.versions.map(v=>`<tr><td>v${v.version}${v.version===vs.liveVersion?' <span class="pill active">LIVE</span>':''}</td><td><span class="pill ${v.status}">${v.status}</span></td><td>${h(v.build_id||'—')}</td><td>${h(v.published_at)}</td><td>${v.version===vs.liveVersion?'':`<button class="ghost" onclick="rollback(${v.version})">回滚到该版本</button>`}</td></tr>`).join('')}</table>`;
+};
+window.rollback=async(v)=>{if(!confirm('确认回滚到 v'+v+'？当前稳定版将被替换为该历史快照。'))return;
+  const docs=await api('GET','/api/admin/docs');
+  await api('POST','/api/admin/docs/'+docs[0].id+'/rollback',{version:v});toast('已回滚到 v'+v,'ok');load('dashboard');};
+
+window.newDraft=async()=>{
+  const docs=await api('GET','/api/admin/docs');
+  const d=await api('POST','/api/admin/docs/'+docs[0].id+'/draft',{});
+  toast('已基于 v'+d.baseVersion+' 创建草稿 v'+d.version,'ok');openDraft(d.docVersionId);
+};
+window.openDraft=async(id)=>{
+  if(!id){
+    const docs=await api('GET','/api/admin/docs');
+    const drafts=await api('GET','/api/admin/docs/'+docs[0].id+'/drafts');
+    if(!drafts[0]){toast('没有草稿','err');return;}
+    id=drafts[0].id;
+  }
+  state.dvId=id;load('edit');
+};
+
+render.edit=async()=>{
+  if(!state.dvId){
+    // 自动选草稿：没有则提示
+    const docs=await api('GET','/api/admin/docs');
+    $('#view').innerHTML='<h2>草稿编辑</h2><div class="card">当前没有打开的草稿。<br><button class="act" onclick="newDraft()">从稳定版新建草稿</button></div>';
+    return;
+  }
+  const d=await api('GET','/api/admin/versions/'+state.dvId);
+  state.etag=d.etag;state.draft=d;
+  $('#view').innerHTML=`<h2>草稿编辑 · v${d.version} <span class="pill draft">${d.status}</span> <span class="muted">基于 v${d.baseVersion??'—'}；etag ${h(d.etag)}</span></h2>
+  <div class="card">
+    <label>主题定位</label><textarea id="fTheme">${h(d.themePositioning)}</textarea>
+    <label>信息结构（JSON：layers/pages）</label><textarea id="fInfo">${h(typeof d.infoStructure==='string'?d.infoStructure:JSON.stringify(d.infoStructure,null,2))}</textarea>
+    <div class="row"><div><label>响应式断点（逗号分隔 px）</label><input id="fBp" value="${(d.responsiveSample.breakpoints||[]).join(',')}"></div>
+    <div><label>响应式说明</label><input id="fBpNote" value="${h(d.responsiveSample.note||'')}"></div></div>
+    <label>响应式样例链接（每行一条，校验用）</label><textarea id="fLinks">${(d.responsiveSample.links||[]).map(h).join('\n')}</textarea>
+    <label>正文（Markdown，链接会参与 G3 校验）</label><textarea id="fBody">${h(d.body)}</textarea>
+    <button class="act" onclick="saveDraft(false)">保存（携带 etag 乐观锁）</button>
+    <button class="ghost" onclick="saveDraft(true)">模拟两编辑冲突（用旧 etag 保存）</button>
+  </div>
+  <div class="card"><h3>已关联组件版本</h3><div id="linked"></div></div>`;
+  $('#linked').innerHTML=(d.components||[]).length?`<table>${d.components.map(c=>`<tr><td>${h(c.name)} v${c.version}</td><td><code>--${h(c.token_name)}:${h(c.token_value)}</code></td><td>截图 ${c.screenshots.length} 张</td></tr>`).join('')}</table>`:'<p class="muted">尚未挂接组件（到“设计决策/引用”页挂接）</p>';
+};
+window.saveDraft=async(forceStale)=>{
+  let info=$('#fInfo').value;
+  try{JSON.parse(info);}catch(e){return toast('信息结构 JSON 解析失败：'+e.message,'err');}
+  const sample={breakpoints:$('#fBp').value.split(',').map(s=>+s.trim()).filter(Boolean),note:$('#fBpNote').value,links:$('#fLinks').value.split('\n').map(s=>s.trim()).filter(Boolean)};
+  try{
+    const r=await api('PUT','/api/admin/versions/'+state.dvId,{themePositioning:$('#fTheme').value,infoStructure:info,responsiveSample:sample,body:$('#fBody').value},forceStale?'stale-etag-000':state.etag);
+    state.etag=r.etag;toast('已保存，新 etag '+r.etag,'ok');
+  }catch(e){toast('保存被拒绝：'+e.message,'err');}
+};
+
+render.decisions=async()=>{
+  const dvId=await ensureDraft();if(!dvId)return;
+  const d=await api('GET','/api/admin/versions/'+dvId);state.dvId=dvId;state.etag=d.etag;
+  $('#view').innerHTML=`<h2>设计决策（草稿 v${d.version}）</h2>
+  <div class="card">
+    <div class="row">
+      <div><label>类型</label><select id="dKind">
+        <option value="source">原创素材来源（须绑定实际页面）</option>
+        <option value="color">色彩（须绑定实际页面）</option>
+        <option value="a11y">可访问交互（须绑定实际页面）</option>
+        <option value="acceptance">验收文档（须先于组件版本）</option>
+        <option value="general">一般设计决策</option></select></div>
+      <div><label>标题</label><input id="dTitle"></div>
+    </div>
+    <label>详情</label><textarea id="dDetail"></textarea>
+    <div class="row"><div><label>关联实际页面（构建快照内路径）</label><input id="dPage" placeholder="/index.html"></div>
+    <div><label>元素选择器（.class / #id / 标签）</label><input id="dSel" placeholder=".navbar"></div></div>
+    <label>引用另一条决策 id（可空，可制造引用环）</label><input id="dRef" placeholder="dec-xxxx">
+    <button class="act" onclick="addDecision()">添加决策</button>
+    <hr style="margin:1rem 0;border:0;border-top:1px solid var(--line)">
+    <label>把组件版本挂接到本草稿（component -> 决策，形成“组件引用”；具体操作请到“组件与令牌”页，那里可选择版本）</label>
+    <div class="muted">在“组件与令牌”页每个组件版本上点击“挂到当前草稿”即可。</div>
+  </div>
+  <div class="card">${d.decisions.map(x=>`<div style="border-bottom:1px solid var(--line);padding:.5rem 0">
+    <span class="pill ${x.kind}">${x.kind}</span> <b>${h(x.title)}</b> <span class="muted">${h(x.id)}</span>
+    <div class="muted">${h(x.detail)}</div>
+    ${x.page_path?`<div class="muted">↳ ${h(x.page_path)} ${h(x.target_selector||'')}</div>`:''}</div>`).join('')||'暂无决策'}</div>`;
+};
+window.addDecision=async()=>{
+  const r=await api('POST','/api/admin/versions/'+state.dvId+'/decisions',{kind:$('#dKind').value,title:$('#dTitle').value,detail:$('#dDetail').value,pagePath:$('#dPage').value,targetSelector:$('#dSel').value,refDecisionId:$('#dRef').value||undefined});
+  toast('决策已添加 '+r.id,'ok');load('decisions');
+};
+
+render.components=async()=>{
+  $('#view').innerHTML='<h2>组件与设计令牌</h2><div class="card" id="compList"></div>';
+  const detail=await api('GET','/api/admin/components-detail');
+  $('#compList').innerHTML=detail.map(c=>`
+    <div style="border:1px solid var(--line);border-radius:10px;padding:.8rem;margin-bottom:.8rem">
+      <b>${h(c.name)}</b> <span class="pill ${c.status}">v${c.version} ${c.status}</span>
+      <div class="muted">${h(c.id)} · <code>--${h(c.token_name)}:${h(c.token_value)}</code>（${h(c.token_semantic)}）
+      ${c.acceptance?' · 验收文档：'+h(c.acceptance.title)+' @'+h(c.acceptance.created_at):' · <span style="color:var(--bad)">无验收文档</span>'}</div>
+      <div class="shotgrid">${c.screenshots.map(s=>`<div><img src="/${s.file_path}"><div class="muted">${s.width}px · fp ${s.fingerprint.slice(0,8)}</div></div>`).join('')}</div>
+      <div class="row" style="margin-top:.5rem">
+        <div><input id="nm-${c.id}" placeholder="新组件名（改名）" value="${h(c.name)}"></div>
+        <div><input id="tv-${c.id}" placeholder="令牌新值，如 #667eea" value="${h(c.token_value)}"></div>
+      </div>
+      <button class="act" onclick="newVer('${c.id}',false)">出新版本（截图随现状生成）</button>
+      <button class="ghost" onclick="newVer('${c.id}',true)">出新版本但暂不补验收（验证 G9）</button>
+      <button class="ghost" onclick="recap(${c.currentCvId})">重新截图</button>
+      <button class="ghost" onclick="accept(${c.currentCvId})">验收通过</button>
+      <button class="ghost" onclick="linkCv(${c.currentCvId})">挂到当前草稿</button>
+    </div>`).join('');
+};
+window.newVer=async(cid,skipAcc)=>{
+  const detail=await api('GET','/api/admin/components-detail');
+  const c=detail.find(x=>x.id===cid);
+  const body={name:$('#nm-'+cid).value.trim()||c.name,tokenName:c.token_name,tokenValue:$('#tv-'+cid).value.trim()||c.token_value,tokenSemantic:c.token_semantic,props:c.props};
+  if(!skipAcc&&c.acceptance)body.acceptanceDecisionId=c.acceptance.id;
+  try{const r=await api('POST','/api/admin/components/'+cid+'/versions',body);toast(`新版本 v${r.version} 已生成三断点截图`,'ok');load('components');}
+  catch(e){toast(e.message,'err');}
+};
+window.recap=async id=>{try{const r=await api('POST','/api/admin/component-versions/'+id+'/recapture',{});toast('已重新截图 '+r.shots.map(s=>s.fp).join(','),'ok');load('components');}catch(e){toast(e.message,'err');}};
+window.accept=async id=>{try{await api('POST','/api/admin/component-versions/'+id+'/accept',{});toast('组件版本已验收','ok');load('components');}catch(e){toast(e.message,'err');}};
+window.linkCv=async cvId=>{const dvId=await ensureDraft();if(!dvId)return;try{await api('POST','/api/admin/versions/'+dvId+'/link-component',{componentVersionId:cvId});toast('已挂接到草稿 v'+dvId,'ok');}catch(e){toast(e.message,'err');}};
+
+render.builds=async()=>{
+  const builds=await api('GET','/api/admin/builds');
+  $('#view').innerHTML=`<h2>站点构建（文档随代码发布一侧）</h2>
+  <div class="card"><button class="act" onclick="mkBuild()">用当前站点源码创建构建快照</button>
+  <span class="muted">快照解析 css/style.css 的 :root 令牌与 @media 断点，供 G2/G8 兼容检查</span></div>
+  <div class="card"><table><tr><th>构建</th><th>code_ref</th><th>状态</th><th>创建</th><th>操作</th></tr>
+  ${builds.map(b=>`<tr><td><a href="/site/${b.id}/index.html" target="_blank">${b.id}</a></td><td>${h(b.code_ref)}</td><td><span class="pill ${b.status}">${b.status}</span></td><td>${h(b.created_at)}</td><td>${b.status==='active'?`<button class="danger" onclick="retract('${b.id}')">撤回构建</button>`:''}</td></tr>`).join('')}</table></div>`;
+};
+window.mkBuild=async()=>{const r=await api('POST','/api/admin/builds',{});toast(`构建 ${r.id}：${r.pages} 页，断点 ${r.breakpoints.join('/')}`,'ok');load('builds');};
+window.retract=async id=>{const r=await api('POST','/api/admin/builds/'+id+'/retract',{});toast(r.notice,'info');load('builds');};
+
+render.release=async()=>{
+  const dvId=await ensureDraft(true);
+  const builds=await api('GET','/api/admin/builds');
+  $('#view').innerHTML=`<h2>兼容检查与发布屏障</h2>
+  <div class="card"><label>对照构建</label><select id="buildPick">${builds.map(b=>`<option value="${b.id}" ${b.status!=='active'?'':''}>${b.id} (${b.status})</option>`).join('')}</select>
+  <button class="ghost" onclick="checkOnly()">只跑屏障检查（不改状态）</button>
+  <button class="act" onclick="promote()">发布候选（全绿才切换稳定版）</button></div>
+  <div class="card" id="gates"></div>`;
+};
+function gatesHtml(gates){return gates.map(g=>`<div class="gate ${g.ok?'ok':'bad'}"><span class="dot ${g.ok?'ok':'bad'}"></span><div><b>${g.id} ${h(g.name)}</b><div class="muted">${h(g.detail)}</div></div></div>`).join('');}
+window.checkOnly=async()=>{
+  const dvId=state.dvId||await ensureDraft(true);
+  const r=await api('POST','/api/admin/versions/'+dvId+'/check',{buildId:$('#buildPick').value});
+  $('#gates').innerHTML=(r.ok?'<b style="color:var(--ok)">全部通过，可以发布</b>':'<b style="color:var(--bad)">存在失败闸：候选将被拒绝，稳定版不动</b>')+gatesHtml(r.gates);
+};
+window.promote=async()=>{
+  const dvId=state.dvId||await ensureDraft(true);
+  try{const r=await api('POST','/api/admin/versions/'+dvId+'/promote',{buildId:$('#buildPick').value});
+    $('#gates').innerHTML='<b style="color:var(--ok)">已发布 v'+r.version+'</b>'+gatesHtml(r.gates);state.dvId=null;toast('发布成功，稳定版已切换','ok');}
+  catch(e){$('#gates').innerHTML='<b style="color:var(--bad)">发布被屏障拒绝（稳定版仍在线）：'+h(e.message)+'</b>'+gatesHtml(e.data.gates||[]);toast('候选被拒绝，稳定版未受影响','err');}
+};
+
+render.audit=async()=>{
+  const logs=await api('GET','/api/admin/audit');
+  const attempts=await api('GET','/api/admin/attempts');
+  $('#view').innerHTML=`<h2>发布尝试</h2><div class="card"><table>
+    <tr><th>#</th><th>版本</th><th>构建</th><th>结果</th><th>失败闸</th><th>时间</th></tr>
+    ${attempts.map(a=>{let gs=[];try{gs=JSON.parse(a.gates_json).filter(g=>!g.ok).map(g=>g.id);}catch(e){}
+      return `<tr><td>${a.id}</td><td>dv#${a.doc_version_id}</td><td>${h(a.build_id||'—')}</td><td><span class="pill ${a.result==='promoted'?'active':'retracted'}">${a.result}</span></td><td>${gs.join(',')||'—'}</td><td>${h(a.created_at)}</td></tr>`;}).join('')}
+  </table></div><h2>审计日志</h2><div class="card"><table>
+    <tr><th>时间</th><th>操作者</th><th>动作</th><th>目标</th><th>详情</th></tr>
+    ${logs.map(l=>`<tr><td>${h(l.created_at)}</td><td>${h(l.actor)}</td><td>${h(l.action)}</td><td>${h(l.target)}</td><td class="muted">${h(l.detail)}</td></tr>`).join('')}</table></div>`;
+};
+
+async function ensureDraft(anyOk){
+  const docs=await api('GET','/api/admin/docs');
+  const doc=docs[0];
+  if(!doc){toast('没有文档','err');return null;}
+  if(state.dvId){return state.dvId;}
+  // 找当前草稿
+  const full=await api('GET','/api/admin/docs');
+  if(full[0].draft_version){
+    // 需要 dv id：打开总览接口没有；用版本列表? 直接用公开? 用一个管理端 drafts 接口
+    const drafts=await api('GET','/api/admin/docs/'+doc.id+'/drafts');
+    if(drafts[0]){state.dvId=drafts[0].id;return drafts[0].id;}
+  }
+  toast('没有草稿，请先在“总览”新建草稿','err');return null;
+}
+
+load('dashboard');
+</script>
+</body>
+</html>
