@@ -1,0 +1,17 @@
+{
+  "name": "design-docs-versioned",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "全栈版本化站内设计说明：内容 API、SQL 版本、截图保鲜与发布屏障",
+  "scripts": {
+    "start": "node src/api/server.js",
+    "init-db": "node scripts/init-db.js",
+    "release": "node scripts/release.js",
+    "test": "node --test test/unit.test.js test/gates.test.js test/e2e.test.js test/frontend.test.js",
+    "delivery-check": "node scripts/delivery-check.js"
+  },
+  "dependencies": {
+    "sql.js": "^1.14.2"
+  }
+}

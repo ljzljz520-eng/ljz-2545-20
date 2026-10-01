@@ -1,0 +1,113 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>设计说明后台</title><style>
+body{font-family:system-ui;margin:0;background:#f6f7fb;color:#15181f}
+.wrap{max-width:1080px;margin:0 auto;padding:20px}
+.card{background:#fff;border:1px solid #e3e6ee;border-radius:10px;padding:16px;margin:12px 0}
+button{min-height:40px;padding:0 14px;border:0;border-radius:6px;background:#2b4cff;color:#fff;cursor:pointer;margin:4px 4px 4px 0}
+button.sec{background:#5d6473}
+textarea{width:100%;min-height:360px;font-family:ui-monospace,Menlo,monospace;font-size:13px;border:1px solid #ccd2e0;border-radius:6px;padding:10px}
+table{border-collapse:collapse;width:100%;font-size:13px}td,th{border:1px solid #e3e6ee;padding:6px 8px;text-align:left}
+.tag{display:inline-block;padding:1px 8px;border-radius:999px;background:#eef1ff;color:#2b4cff;font-size:12px}
+.tag.draft{background:#fff4e0;color:#8a4b00}.tag.rejected{background:#fdecea;color:#b3261e}
+.tag.published{background:#e7f6ec;color:#1d7a37}
+#out{white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:12px;max-height:260px;overflow:auto}
+.conflict{background:#fdecea;border:1px solid #b3261e;border-radius:8px;padding:10px;display:none}
+</style></head><body><div class="wrap">
+<h1>设计说明 · 版本管理后台</h1>
+<p>公开页 <a href="/d/design-system" target="_blank">/d/design-system</a> · 草稿仅在此处可见，公开 URL 一律 404。</p>
+
+<div class="card">
+  <strong>1. 编辑草稿</strong>
+  <div id="conflictBox" class="conflict"></div>
+  <textarea id="editor" spellcheck="false"></textarea>
+  <div>
+    <button onclick="loadDraft()">载入最新草稿</button>
+    <button onclick="saveNewVersion()">另存为新版本</button>
+    <button class="sec" onclick="updateDraft()">就地更新（带乐观锁）</button>
+    <span id="draftMeta" class="tag"></span>
+  </div>
+</div>
+
+<div class="card">
+  <strong>2. 变更（用于验证截图保鲜）</strong>
+  <div>
+    组件改名：<input id="rnSlug" value="card" size="8"> → <input id="rnName" value="Card 信息卡片" size="16">
+    <button class="sec" onclick="act('components/rename',{slug:val('rnSlug'),displayName:val('rnName')})">改名</button>
+  </div>
+  <div style="margin-top:8px">
+    设计令牌：<button class="sec" onclick="act('tokens/bump',{overrides:{color:{brand:'#0b8a5f'}}})">把 brand 改成绿色（新令牌版本）</button>
+    <button class="sec" onclick="act('components/acceptance',{slug:'modal',docRef:'design-system@1'})">给 Modal 挂验收文档</button>
+    <button class="sec" onclick="act('components/activate',{slug:'modal'})">Modal 上线</button>
+  </div>
+</div>
+
+<div class="card">
+  <strong>3. 构建 → 发布屏障 → 提升 / 撤回</strong>
+  <div>
+    模式
+    <select id="mode"><option value="decoupled">独立内容发布（选定）</option><option value="coupled">随代码发布</option></select>
+    <button onclick="makeBuild()">用当前草稿创建候选构建</button>
+    <button onclick="gateBuild(false)">运行发布屏障</button>
+    <button class="sec" onclick="gateBuild(true)">运行屏障（注入 card 截图失败）</button>
+    <button onclick="promote()">提升为稳定版</button>
+    <button class="sec" onclick="rollback()">撤回（回到上一版）</button>
+  </div>
+</div>
+
+<div class="card"><strong>状态</strong><div id="state"></div></div>
+<div class="card"><strong>最近一次操作结果</strong><div id="out"></div></div>
+</div>
+<script>
+const TOKEN = new URLSearchParams(location.search).get('token') || 'dev-admin-token';
+const H = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN };
+let lastDraftVersion = null, lastChecksum = null, lastBuildKey = null;
+const val = (id) => document.getElementById(id).value;
+function out(x, el='out'){ document.getElementById(el).textContent = typeof x==='string'?x:JSON.stringify(x,null,2); }
+async function api(path, opts={}){
+  const r = await fetch('/admin/api/'+path, { headers:H, method:opts.method||(opts.body?'POST':'GET'),
+    body: opts.body?JSON.stringify(opts.body):undefined });
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok){ out({http:r.status, ...j}); if(j.conflict) showConflict(j.conflict); throw new Error(j.error); }
+  document.getElementById('conflictBox').style.display='none';
+  return j;
+}
+function showConflict(c){
+  const b=document.getElementById('conflictBox'); b.style.display='block';
+  b.innerHTML='<strong>两编辑冲突（HTTP 409）</strong><br>'+JSON.stringify(c,null,2)+
+    '<br><button onclick="loadDraft();this.parentElement.style.display=\'none\'">拉取他人最新草稿后手动合并</button>';
+}
+async function loadDraft(){
+  const j = await api('drafts?docSlug=design-system');
+  lastDraftVersion=j.version; lastChecksum=j.checksum;
+  document.getElementById('editor').value=JSON.stringify(j.content,null,2);
+  document.getElementById('draftMeta').textContent='草稿 v'+j.version+' · checksum '+j.checksum.slice(0,10);
+  refresh();
+}
+async function saveNewVersion(){
+  const content=JSON.parse(document.getElementById('editor').value);
+  const j=await api('drafts',{body:{docSlug:'design-system',title:'站内设计说明',content,baseVersion:lastDraftVersion,editor:document.cookie||'editor-a'}});
+  out(j); lastDraftVersion=j.version; lastChecksum=j.checksum; refresh();
+}
+async function updateDraft(){
+  const content=JSON.parse(document.getElementById('editor').value);
+  const j=await api('drafts/v'+lastDraftVersion,{method:'PUT',body:{docSlug:'design-system',content,expectedChecksum:lastChecksum,editor:'editor-a'}});
+  out(j); lastChecksum=j.checksum; refresh();
+}
+async function act(name,body){ out(await api(name,{body})); await loadDraft(); }
+async function makeBuild(){ const b=await api('builds',{body:{docSlug:'design-system',version:lastDraftVersion,mode:val('mode')}}); lastBuildKey=b.buildKey; out(b); refresh(); }
+async function gateBuild(fail){ const j=await api('builds/'+lastBuildKey+'/gate',{body:fail?{failSet:['card']}:{}}); out(j); refresh(); }
+async function promote(){ out(await api('builds/'+lastBuildKey+'/promote',{body:{editor:'editor-a'}})); await loadDraft(); }
+async function rollback(){ out(await api('releases/rollback',{body:{docSlug:'design-system'}})); await loadDraft(); }
+async function refresh(){
+  const s=await api('state?docSlug=design-system');
+  const rel=s.release?`<span class="tag published">线上 v${s.versions.find(v=>v.id===s.release.doc_version_id)?.version||''}</span>`:'<span class="tag draft">暂无线上版本</span>';
+  document.getElementById('state').innerHTML=rel+
+  '<table><tr><th>版本</th><th>状态</th><th>编辑</th></tr>'+
+  s.versions.map(v=>`<tr><td>v${v.version}</td><td><span class="tag ${v.status}">${v.status}</span></td><td>${v.editor||''}</td></tr>`).join('')+
+  '</table><p>组件：'+s.components.map(c=>`${c.display_name}[${c.status}]`).join('， ')+'</p>'+
+  '<p>令牌：'+s.tokens.hash+'</p>'+
+  '<p>构建：'+s.builds.map(b=>`${b.build_key} <span class="tag ${b.status}">${b.status}</span> (${b.mode})`).join('<br>')+'</p>';
+}
+loadDraft().catch(e=>out('载入失败: '+e.message));
+</script></body></html>
